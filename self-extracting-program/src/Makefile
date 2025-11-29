@@ -35,7 +35,7 @@ abel_depends = $(abel_obj) $(abel_so) $(abel_embed)
 
 cain_src = cain.c base64.c
 cain_obj = $(patsubst %.c, $(objdir)/%.o, $(cain_src))
-cain_prog = cain
+cain_prog = cain.bin
 
 # --- cain sources ---
 
