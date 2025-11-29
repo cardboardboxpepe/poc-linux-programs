@@ -10,3 +10,4 @@ fonts/
 *.pem
 obj/
 *.bin
+.gdb*
