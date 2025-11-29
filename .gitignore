@@ -1,0 +1,12 @@
+node_modules/
+*.bin
+__pycache__/
+*.pyc
+.vscode/
+icons/
+*.zip
+fonts/
+.venv/
+*.pem
+obj/
+*.bin
