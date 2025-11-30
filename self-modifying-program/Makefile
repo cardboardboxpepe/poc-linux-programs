@@ -127,6 +127,7 @@ $(semi-prog): $(obj) $(blob)
 	@echo "Creating the intermediate program"
 	gcc -o $@ $^ $(ldflags)
 
+# linking & stripping the final product
 $(prog): $(obj) $(packed) | $(semi-prog) $(symfile)
 	@echo "Creating the final program"
 	gcc -o $@ $^ $(ldflags)
@@ -134,7 +135,7 @@ $(prog): $(obj) $(packed) | $(semi-prog) $(symfile)
 	@echo "Replacing functions with nops"
 	python helper.py --overwrite -f $@ -o $@ --symbols $(functions)
 
-	@echo "Removing info from the binary"
+	@echo "Stripping the binary of symbols and metadata"
 	objcopy \
 		-S -w -x -X -g \
 		--strip-symbols $(symfile) \
