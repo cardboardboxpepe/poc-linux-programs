@@ -17,10 +17,11 @@ packeddir := $(objdir)/packed
 # --- challenge stuff ---
 
 # file alignment
-ALIGN := 1024
+ALIGN := 512
 
 # the symbol to obscure
 functions := obscure hidden
+strips := unpack_into __obs* __hidden*
 syms := $(patsubst %, %.sym, $(functions))
 
 # sources
@@ -45,15 +46,18 @@ final-program := $(obj) $(packed)
 semi-prog := intermediate.bin
 prog := smodify.bin
 
+# symbol file to strip symbols
+symfile := $(objdir)/syms.txt
+
 # --- build requirements ---
 # --- flags ---
 
 # flags
 sec_flags := -fstack-protector-strong
-cxxflags := $(sec_flags) -I. -O1 -fvisibility=default
+cxxflags := $(sec_flags) -I. -O0 -fvisibility=default
 
 # linker flags
-ldflags := -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlinker.ld -rdynamic
+ldflags := -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlinker.ld
 
 # --- flags ---
 
@@ -61,6 +65,12 @@ ldflags := -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlink
 all: $(prog)
 .PHONY: all clean
 .PRECIOUS: $(blobdir)/%.sym $(packeddir)/%.em
+
+# build the symbol file
+$(symfile): | $(objdir)
+	@echo "Creating the symbol file for stripping symbols"
+	echo "$(functions) $(strips)" > $@
+	sed -i $@ -e "s% %\n%g"
 
 # compiling regular objects
 $(objdir)/%.o: %.c | $(objdir)
@@ -83,6 +93,8 @@ $(blobdir)/%.blob: $(blobdir)/%.sym | $(blobdir)
 	objcopy \
 		--redefine-sym _binary_obj_blobs_$(SYM)_sym_start=__$(SYM)_start \
 		--redefine-sym _binary_obj_blobs_$(SYM)_sym_end=__$(SYM)_end \
+		-w \
+		-N *$(SYM)_size* \
 		--rename-section .data=.$(SYM) \
 		$@
 
@@ -107,6 +119,7 @@ $(packeddir)/%.packed: $(packeddir)/%.em | $(packeddir) $(semi-prog)
 	objcopy \
 		--redefine-sym _binary_obj_packed_$(SYM)_em_start=__$(SYM)_start \
 		--redefine-sym _binary_obj_packed_$(SYM)_em_end=__$(SYM)_end \
+		-N _binary_obj_packed_$(SYM)_em_size \
 		--rename-section .data=.$(SYM) \
 		$@
 
@@ -115,12 +128,20 @@ $(semi-prog): $(obj) $(blob)
 	@echo "Creating the intermediate program"
 	gcc -o $@ $^ $(ldflags)
 
-$(prog): $(obj) $(packed) | $(semi-prog)
+$(prog): $(obj) $(packed) | $(semi-prog) $(symfile)
 	@echo "Creating the final program"
 	gcc -o $@ $^ $(ldflags)
 
 	@echo "Replacing functions with nops"
 	python helper.py --overwrite -f $@ -o $@ --symbols $(functions)
+
+	@echo "Removing info from the binary"
+	objcopy \
+		-S -w -x -X -g \
+		--strip-symbols $(symfile) \
+		--remove-section=.comment \
+		--remove-section=.note.* \
+		$@
 
 # making directories
 $(objdir):
