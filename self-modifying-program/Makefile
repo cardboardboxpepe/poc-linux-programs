@@ -93,8 +93,7 @@ $(blobdir)/%.blob: $(blobdir)/%.sym | $(blobdir)
 	objcopy \
 		--redefine-sym _binary_obj_blobs_$(SYM)_sym_start=__$(SYM)_start \
 		--redefine-sym _binary_obj_blobs_$(SYM)_sym_end=__$(SYM)_end \
-		-w \
-		-N *$(SYM)_size* \
+		-N _binary_obj_blobs_$(SYM)_sym_size \
 		--rename-section .data=.$(SYM) \
 		$@
 
