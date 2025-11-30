@@ -125,6 +125,13 @@ def create_embed_file(
         # log
         print(f"function {symbol} is {len(contents)} bytes long")
 
+        """
+        Yes, while I could just create the blob file again, I'm lazy,
+        it's already there, and I just don't feel like refactoring my code.
+
+        Also, the file must be text and not an object file.
+        """
+
         # open the blob
         bb = blob.read_bytes()
         print(f"read {len(bb)} bytes from {blob}")
@@ -167,6 +174,13 @@ def create_prep_file(size: int, output: Path) -> int:
 def overwrite_file(output: Path, file: Path, symbols: list[str]):
     # make a copy of the file
     nbwritten = output.write_bytes(file.read_bytes())
+
+    """
+    For whatever reason, during testing, making a copy of a file just didn't work
+    properly. Like, copying file A to file B just didn't work with the rest of my toolchain.
+    Why? I have no idea.
+    """
+
     print(f"wrote {nbwritten} bytes to {output}")
 
     # overwrite functions
@@ -177,7 +191,7 @@ def overwrite_file(output: Path, file: Path, symbols: list[str]):
 
 
 parser = argparse.ArgumentParser(
-    description="The helper script for the self-modifying program"
+    description="The helper script for the self-modifying program",
 )
 
 # a toggle group
@@ -213,7 +227,7 @@ overwrite_options.add_argument(
     dest="symbols",
     type=str,
     nargs="+",
-    help="The symbols to overwrite with nops",
+    help="The functions to overwrite with nops",
 )
 
 ## options for --prep
@@ -230,14 +244,14 @@ embed_options.add_argument(
     "--symbol",
     dest="symbol",
     type=str,
-    help="The symbol to lookup in the binary",
+    help="The function to lookup in the binary",
 )
 embed_options.add_argument(
     "-b",
     "--blob",
     dest="blob",
     type=str,
-    help="The blob file that was used to link the given symbol",
+    help="The blob file that was used to link the given function",
 )
 
 ## general arguments
@@ -248,7 +262,7 @@ parser.add_argument(
     "--file",
     dest="file",
     type=str,
-    help="An ELF file, only meaningful for --embed and --overwrite",
+    help="The target ELF file, only meaningful for --embed and --overwrite",
 )
 parser.add_argument(
     "-o",
@@ -256,13 +270,14 @@ parser.add_argument(
     dest="output",
     type=str,
     help="The path to the output file",
+    required=True,
 )
 parser.add_argument(
     "-a",
     "--align",
     dest="align",
     type=int,
-    help="Used to align the blob/base64 encoded function to a given value",
+    help="Used to align the blob/base64 encoded function to a certain size, meaningless for --overwrite",
 )
 
 if __name__ == "__main__":
