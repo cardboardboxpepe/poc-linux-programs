@@ -1,4 +1,5 @@
 #include <dlfcn.h>
+#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,38 +16,48 @@
 #define _GNU_SOURCE
 #endif
 
-typedef void (*smodify_t)(void*);
+// addresses for the obscure function
+extern void *__obscure_start;
+extern void *__obscure_end;
 
-// function to be called from the regular mapped section
-void from_local() { printf("hello from from_local"); }
+// addresses of the text section
+extern void *__text_start;
+extern void *__text_end;
 
 // function to be called from the new mmap'd page
-void from_page(void (*__printf)(char *, ...)) {
-  __printf("hello from from_page\n");
+void obscure() { printf("hello from obscure"); }
+
+// unpack obscure
+void unpack_obscure() {
+  // get handle to function
+  void *target = &obscure;
+
+  // calculate size
+  size_t sz = strlen(__obscure_start);
+
+  // helper
+  printf("__obscure_start @ %p", &__obscure_start);
+  printf("__obscure_start @ %p", &__obscure_end);
+  printf("size of payload %lx", sz);
+
+  // decode binary text
+  EVP_DecodeBlock(target, __obscure_start, sz);
 }
 
-// test returning a value
-int ret42() { return 42; }
-
 int main(int argc, char **argv) {
-  // create new mmap page
-  smodify_t page = mmap(NULL, 0x1000, PROT_EXEC | PROT_WRITE | PROT_READ,
-                        MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  if (page == MAP_FAILED) {
-    perror("failed to create the mapping");
-    exit(1);
-  }
+  // calculate size of the text section
+  size_t sz = &__text_end - &__text_start;
+  // alignment
+  sz = (sz + 0xFFF) & ~0xFFF;
 
-  // copy function into it
-  memcpy(page, &from_page, 0x200);
+  // set protections
+  mprotect(&__text_start, sz, PROT_EXEC | PROT_READ | PROT_WRITE);
 
-  // logging
-  printf("addr of from_local: %p\n", &from_local);
-  printf("addr of from_page: %p\n", &from_page);
-  printf("page is at %p\n", page);
+  // unpack obscure
+  puts("unpacking obscure");
+  unpack_obscure();
 
-  // call the new function
-  page(&printf);
-
-  munmap(page, 0x1000);
+  // call obscure
+  puts("calling obscure");
+  obscure();
 }
