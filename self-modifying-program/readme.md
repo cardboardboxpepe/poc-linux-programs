@@ -10,10 +10,10 @@ The idea is, since that all calls on amd64 are position-relative, meaning,
 there is no absolute address that `call` calls, I need to work with the linker,
 in order to do what I want.
 
-The goal is to have the linker do everything for us, grab the code, encode it,
-store it somewhere, unpack it at runtime and execute it. We absolutely require
-the linker to calculate where the functions are to be placed and the proper
-calculation of `jmp` and `call` instructions.
+The goal is to have the linker do everything for us, so we can: grab the code,
+encode it, store it somewhere, unpack it at runtime and execute it. We
+absolutely require the linker to calculate where the functions are to be placed
+and the proper calculation of `jmp` and `call` instructions.
 
 The process is as such:
 
