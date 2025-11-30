@@ -117,10 +117,12 @@ $(semi-prog): $(obj) $(blob)
 
 $(prog): $(obj) $(packed) | $(semi-prog)
 	@echo "Creating the final program"
-	gcc -o $@ $^ $(ldflags)
+	gcc -o temp $^ $(ldflags)
 
 	@echo "Replacing functions with nops"
-	python helper.py --overwrite -f $@ --symbols $(functions)
+	python helper.py --overwrite -f temp -o $@ --symbols $(functions)
+
+	@rm temp
 
 # making directories
 $(objdir):
@@ -131,4 +133,4 @@ $(packeddir):
 	@mkdir -p $@
 
 clean:
-	rm -rf $(objdir) *.o *.dep *.debug $(prog) core*
+	rm -rf $(objdir) $(prog) core* $(semi-prog) $(blob) $(packed) $(embed) $(syms)

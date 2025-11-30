@@ -168,8 +168,13 @@ def create_prep_file(size: int, output: Path) -> int:
     return 0
 
 
-def overwrite_file(file: Path, symbols: list[str]):
-    overwrite_function(file, symbols)
+def overwrite_file(output: Path, file: Path, symbols: list[str]):
+    # make a copy of the file
+    contents = file.read_bytes()
+    output.write_bytes(contents)
+
+    # overwrite functions
+    overwrite_function(output, symbols)
 
     # logging
     print(f"overwrote {len(symbols)} syms")
@@ -254,7 +259,7 @@ parser.add_argument(
     "--output",
     dest="output",
     type=str,
-    help="The path to the output file, ignored by --overwrite, use --file instead",
+    help="The path to the output file",
 )
 parser.add_argument(
     "-a",
@@ -272,13 +277,13 @@ if __name__ == "__main__":
     if not args.output and not args.overwrite:
         print("no output path specified")
         sys.exit(1)
+    output = Path(args.output)
 
     # switch
     if args.embed:
         # cast args
         file = Path(args.file)
         blob = Path(args.blob)
-        output = Path(args.output)
 
         # call main function
         sys.exit(
@@ -291,15 +296,12 @@ if __name__ == "__main__":
             )
         )
     elif args.prep:
-        # cast args
-        output = Path(args.output)
-
         sys.exit(create_prep_file(size=args.align, output=output))
     elif args.overwrite:
         # cast args
         file = Path(args.file)
 
-        sys.exit(overwrite_file(file=file, symbols=args.symbols))
+        sys.exit(overwrite_file(output=output, file=file, symbols=args.symbols))
     else:
         print("invalid mode")
         sys.exit(1)
