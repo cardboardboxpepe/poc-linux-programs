@@ -1,59 +1,59 @@
 import sys
 import argparse
 from pathlib import Path
+from base64 import b64encode
 
 from elftools.elf.elffile import ELFFile
+from capstone import Cs, CS_ARCH_X86, CS_MODE_64
 
 
-def get_function_size(path, func_name) -> tuple[int]:
+def get_function_bytes(path: Path, func: str) -> bytes:
     with open(path, "rb") as f:
         elf = ELFFile(f)
 
-        # Find .symtab (static symbol table)
-        symtab = None
-        for section in elf.iter_sections():
-            if section["sh_type"] == "SHT_SYMTAB":
-                symtab = section
+        # Find the symbol table (.symtab)
+        symtab = elf.get_section_by_name(".symtab")
+        if symtab is None:
+            raise RuntimeError("No .symtab found (binary may be stripped)")
+
+        # Find the function symbol
+        sym = None
+        for s in symtab.iter_symbols():
+            if s.name == func and s["st_size"] > 0:
+                sym = s
                 break
 
-        if symtab is None:
-            raise RuntimeError("No .symtab found (binary may be stripped).")
+        if sym is None:
+            raise RuntimeError(f"Function '{func}' not found or st_size == 0")
 
-        # Collect all function symbols
-        func_syms = []
-        target_sym = None
-        for sym in symtab.iter_symbols():
-            st_info_type = sym["st_info"]["type"]
-            if st_info_type != "STT_FUNC":
-                continue
+        # function data
+        func_addr = sym["st_value"]  # virtual address
+        func_size = sym["st_size"]  # nb bytes
 
-            name = sym.name
-            value = sym["st_value"]
-            size = sym["st_size"]
+        # Find which section contains the function
+        sec = elf.get_section(sym["st_shndx"])
+        sec_addr = sec["sh_addr"]
+        sec_offset = sec["sh_offset"]
 
-            func_syms.append(sym)
-            if name == func_name:
-                target_sym = sym
+        # Calculate file offset of function
+        file_off = sec_offset + (func_addr - sec_addr)
 
-        if target_sym is None:
-            raise RuntimeError(f"Function '{func_name}' not found in .symtab")
-
-        # If st_size is set, use it directly
-        if target_sym["st_size"] > 0:
-            return target_sym["st_size"]
-
-        # Otherwise, approximate from the next function by address
-        target_addr = target_sym["st_value"]
-        higher_funcs = [s for s in func_syms if s["st_value"] > target_addr]
-
-        if not higher_funcs:
-            raise RuntimeError(f"No following function to infer size for '{func_name}'")
-
-        next_sym = min(higher_funcs, key=lambda s: s["st_value"])
-        return next_sym["st_value"] - target_addr
+        # Read its bytes
+        f.seek(file_off)
+        return f.read(func_size)
 
 
-def create_embed_file(align: int, symbol: str, file: Path, output: Path) -> int:
+def disasm(code_bytes, start_addr=0x0):
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    md.detail = False  # no extra info, just mnemonics
+
+    for insn in md.disasm(code_bytes, start_addr):
+        print(f"0x{insn.address:016x}:  {insn.mnemonic} {insn.op_str}")
+
+
+def create_embed_file(
+    blob: Path, align: int, symbol: str, file: Path, output: Path
+) -> int:
     # check align
     if align <= 0:
         print(f"align must be greater than zero, was {align}")
@@ -64,18 +64,40 @@ def create_embed_file(align: int, symbol: str, file: Path, output: Path) -> int:
         print(f"symbol must be a valid string, was {symbol}")
         return 1
 
-    # check file
+    # check files
     if not file.exists():
-        print(f"the file at {file} doesn't exist!")
+        print(f"the main binary at {file} doesn't exist!")
+        return 1
+    if not blob.exists():
+        print(f"the blob at {blob} doesn't exist!")
         return 1
 
     # -- main logic --
     try:
         # get the size of the function
-        size = get_function_size(file, symbol)
+        contents = get_function_bytes(file, symbol)
+
+        # print the bytes of sym
+        print(f"disassembly of {symbol}")
+        disasm(contents)
 
         # log
-        print(f"function {symbol} is {size} bytes long")
+        print(f"function {symbol} is {len(contents)} bytes long")
+
+        # open the blob
+        bb = blob.read_bytes()
+        print(f"read {len(bb)} bytes from {blob}")
+
+        # form the payload
+        payload = b64encode(contents) + b"\0"
+        print(f"encoded payload is now {len(payload)} from {len(contents)}")
+
+        # overwite
+        payload += bb[len(payload) : align]
+
+        # write to file
+        nb_written = output.write_bytes(payload)
+        print(f"wrote {nb_written} bytes to {output}")
     except Exception as e:
         print(f"encountered exception: {e}")
         return 1
@@ -90,8 +112,16 @@ def create_prep_file(size: int, output: Path) -> int:
         print(f"size must be greater than zero, was {size}")
         return 1
 
+    # forming the payload
+    payload = b"\x90" * (size - 1)
+    payload = b64encode(payload) + b"\0"
+
+    # trimming
+    payload = payload[:size]
+
     # write to file
-    output.write_bytes(b"A" * size)
+    nb_written = output.write_bytes(payload)
+    print(f"wrote {nb_written} (aligned to {size}) bytes to {output}")
 
     # OK
     return 0
@@ -148,6 +178,13 @@ embed_options.add_argument(
     type=str,
     help="The target binary to search the symbol in",
 )
+embed_options.add_argument(
+    "-b",
+    "--blob",
+    dest="blob",
+    type=str,
+    help="The blob file that was used to link the given symbol",
+)
 
 ## general arguments
 
@@ -181,10 +218,16 @@ if __name__ == "__main__":
     if args.embed:
         # cast args
         file = Path(args.file)
+        blob = Path(args.blob)
 
+        # call main function
         sys.exit(
             create_embed_file(
-                align=args.align, symbol=args.symbol, file=file, output=output
+                blob=blob,
+                align=args.align,
+                symbol=args.symbol,
+                file=file,
+                output=output,
             )
         )
     elif args.prep:

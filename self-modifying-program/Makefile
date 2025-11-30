@@ -20,7 +20,8 @@ packeddir := $(objdir)/packed
 ALIGN := 1024
 
 # the symbol to obscure
-syms := obscure
+_syms := obscure
+syms := $(patsubst %, %.sym, $(_syms))
 
 # sources
 src := smodify.c
@@ -29,8 +30,9 @@ src := smodify.c
 obj := $(patsubst %.c, $(objdir)/%.o, $(src))
 
 # blobs for obscuring/linking
-blob := $(patsubst %, $(blobdir)/%.blob, $(syms))
-packed := $(patsubst %, $(packeddir)/%.packed, $(syms))
+blob := $(patsubst %.sym, $(blobdir)/%.blob, $(syms))
+embeds := $(patsubst %.sym, $(packeddir)/%.em, $(syms))
+packed := $(patsubst %.sym, $(packeddir)/%.packed, $(syms))
 
 # --- files ---
 # --- build requirements ---
@@ -58,35 +60,55 @@ ldflags := -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlink
 # main build target
 all: $(prog)
 .PHONY: all clean
+.PRECIOUS: $(blobdir)/%.sym $(packeddir)/%.em
 
 # compiling regular objects
 $(objdir)/%.o: %.c | $(objdir)
 	@echo "Compiling $<"
 	gcc $(cxxflags) -c $< -o $@
 
-# rule for creating blobs
-$(blobdir)/%.blob: | $(blobdir)
-	$(eval FILE := $(patsubst $(blobdir)/%.blob,$(blobdir)/%, $@))
-	$(eval SYM := $(patsubst $(blobdir)/%.blob,%, $@))
+# rule for creating syms
+$(blobdir)/%.sym: | $(blobdir)
+	$(eval FILE := $(patsubst $(blobdir)/%.sym,$(blobdir)/%, $@))
+	$(eval SYM := $(patsubst $(blobdir)/%.sym,%, $@))
 	@echo "Creating blob $@ for sym $(SYM)"
-	python helper.py --prep -a $(ALIGN) -o $(FILE)
+	python helper.py --prep -a $(ALIGN) -o $@
 
-	@echo "Making blob $@ embeddable"
-	ld -r -b binary -o $@ $(FILE)
+# rule for creating blobs
+$(blobdir)/%.blob: $(blobdir)/%.sym | $(blobdir)
+	@echo "Making blob $< embeddable (target $@)"
+	ld -r -b binary -o $@ $<
 
 	@echo "Renaming sections for blob $@"
 	objcopy \
-		--redefine-sym _binary_obj_blobs_$(SYM)_start=__$(SYM)_start \
-		--redefine-sym _binary_obj_blobs_$(SYM)_end=__$(SYM)_end \
+		--redefine-sym _binary_obj_blobs_$(SYM)_sym_start=__$(SYM)_start \
+		--redefine-sym _binary_obj_blobs_$(SYM)_sym_end=__$(SYM)_end \
 		--rename-section .data=.$(SYM) \
 		$@
-# cleanup
-	@rm $(FILE)
 
 # creating packed objects from blobs
-$(packeddir)/%.packed: $(blobdir)/%.blob | $(packeddir) $(semi-prog)
+$(packeddir)/%.em: $(blobdir)/%.sym | $(packeddir) $(semi-prog)
+	$(eval SYM := $(patsubst $(blobdir)/%.sym,%, $<))
 	@echo "Creating packed object $@ from $<"
-	cp $< $@
+	python helper.py --embed \
+		-f $(semi-prog) \
+		-o $@ \
+		--symbol $(SYM) \
+		--align $(ALIGN) \
+		--blob $<
+
+# creating packed objects from blobs
+$(packeddir)/%.packed: $(packeddir)/%.em | $(packeddir) $(semi-prog)
+	$(eval SYM := $(patsubst $(packeddir)/%.em,%, $<))
+	@echo "Making packed code $< embeddable (target $@)"
+	ld -r -b binary -o $@ $<
+
+	@echo "Renaming sections for packed blob $@"
+	objcopy \
+		--redefine-sym _binary_obj_packed_$(SYM)_em_start=__$(SYM)_start \
+		--redefine-sym _binary_obj_packed_$(SYM)_em_end=__$(SYM)_end \
+		--rename-section .data=.$(SYM) \
+		$@
 
 # creating the intermediate program
 $(semi-prog): $(obj) $(blob)
@@ -106,4 +128,4 @@ $(packeddir):
 	@mkdir -p $@
 
 clean:
-	rm -rf $(objdir) *.o *.dep *.debug $(prog)
+	rm -rf $(objdir) *.o *.dep *.debug $(prog) core*

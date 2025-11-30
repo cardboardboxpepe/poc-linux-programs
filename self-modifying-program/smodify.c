@@ -31,17 +31,25 @@ void obscure() { printf("hello from obscure"); }
 void unpack_obscure() {
   // get handle to function
   void *target = &obscure;
+  void *ptr = (void *)&__obscure_start;
+
+  // logging
+  printf("__obscure_start @ %p\n", &__obscure_start);
+  printf("__obscure_start @ %p\n", &__obscure_end);
 
   // calculate size
-  size_t sz = strlen(__obscure_start);
+  size_t sz = strlen(ptr);
 
   // helper
-  printf("__obscure_start @ %p", &__obscure_start);
-  printf("__obscure_start @ %p", &__obscure_end);
-  printf("size of payload %lx", sz);
+  printf("size of payload %lx\n", sz);
+  fflush(stdout);
 
   // decode binary text
-  EVP_DecodeBlock(target, __obscure_start, sz);
+  if (EVP_DecodeBlock(target, ptr, sz) == -1) {
+    puts("failed to decode obscure");
+  } else {
+    puts("decoded obscure into function");
+  }
 }
 
 int main(int argc, char **argv) {
