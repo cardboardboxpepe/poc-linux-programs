@@ -153,12 +153,8 @@ def create_prep_file(size: int, output: Path) -> int:
         print(f"size must be greater than zero, was {size}")
         return 1
 
-    # forming the payload
-    payload = b"\x90" * (size - 1)
-    payload = b64encode(payload) + b"\0"
-
-    # trimming
-    payload = payload[:size]
+    # forming payload
+    payload = b"A" * (size - 1) + b"\0"
 
     # write to file
     nb_written = output.write_bytes(payload)
