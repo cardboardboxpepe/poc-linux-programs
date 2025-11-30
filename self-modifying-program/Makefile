@@ -48,10 +48,10 @@ prog := smodify.bin
 
 # flags
 sec_flags := -fstack-protector-strong
-cxxflags := $(sec_flags) -I. -ggdb3 -g -O0 -DDEBUG=1 -D_DEBUG=1 -fvisibility=default -fno-PIC
+cxxflags := $(sec_flags) -I. -O1 -fvisibility=default
 
 # linker flags
-ldflags := -no-pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlinker.ld
+ldflags := -Wl,-z,relro,-z,now -Wl,-z,noexecstack -lssl -lcrypto -ldl -Wl,-Tlinker.ld -rdynamic
 
 # --- flags ---
 
