@@ -43,6 +43,47 @@ def get_function_bytes(path: Path, func: str) -> bytes:
         return f.read(func_size)
 
 
+def overwrite_function(path: Path, syms: list[str]):
+    with open(path, "rb+") as f:
+        elf = ELFFile(f)
+
+        # Find the symbol table (.symtab)
+        symtab = elf.get_section_by_name(".symtab")
+        if symtab is None:
+            raise RuntimeError("No .symtab found (binary may be stripped)")
+
+        for func in syms:
+            # Find the function symbol
+            sym = None
+            for s in symtab.iter_symbols():
+                if s.name == func and s["st_size"] > 0:
+                    sym = s
+                    break
+
+            if sym is None:
+                raise RuntimeError(f"Function '{func}' not found or st_size == 0")
+
+            # function data
+            func_addr = sym["st_value"]  # virtual address
+            func_size = sym["st_size"]  # nb bytes
+
+            # Find which section contains the function
+            sec = elf.get_section(sym["st_shndx"])
+            sec_addr = sec["sh_addr"]
+            sec_offset = sec["sh_offset"]
+
+            # Calculate file offset of function
+            file_off = sec_offset + (func_addr - sec_addr)
+
+            # Read its bytes
+            f.seek(file_off)
+            if f.write(b"\x90" * func_size) != func_size:
+                raise RuntimeError(f"error overwriting function {sym}")
+
+            # log
+            print(f"overwrite {func_size} bytes of function {func} with NOPs")
+
+
 def disasm(code_bytes, start_addr=0x0):
     md = Cs(CS_ARCH_X86, CS_MODE_64)
     md.detail = False  # no extra info, just mnemonics
@@ -92,7 +133,7 @@ def create_embed_file(
         payload = b64encode(contents) + b"\0"
         print(f"encoded payload is now {len(payload)} from {len(contents)}")
 
-        # overwite
+        # overwrite
         payload += bb[len(payload) : align]
 
         # write to file
@@ -127,6 +168,13 @@ def create_prep_file(size: int, output: Path) -> int:
     return 0
 
 
+def overwrite_file(file: Path, symbols: list[str]):
+    overwrite_function(file, symbols)
+
+    # logging
+    print(f"overwrote {len(symbols)} syms")
+
+
 parser = argparse.ArgumentParser(
     description="The helper script for the self-modifying program"
 )
@@ -149,10 +197,22 @@ group.add_argument(
 )
 group.add_argument(
     "--overwrite",
-    dest="overwite",
+    dest="overwrite",
     action="store_true",
     help="Overwrite the function with nop instructions",
     default=False,
+)
+
+## options for --overwrite
+overwrite_options = parser.add_argument_group(
+    "overwrite options", description="Arguments for the --overwrite flag"
+)
+overwrite_options.add_argument(
+    "--symbols",
+    dest="symbols",
+    type=str,
+    nargs="+",
+    help="The symbols to overwrite with nops",
 )
 
 ## options for --prep
@@ -172,13 +232,6 @@ embed_options.add_argument(
     help="The symbol to lookup in the binary",
 )
 embed_options.add_argument(
-    "-f",
-    "--file",
-    dest="file",
-    type=str,
-    help="The target binary to search the symbol in",
-)
-embed_options.add_argument(
     "-b",
     "--blob",
     dest="blob",
@@ -190,11 +243,18 @@ embed_options.add_argument(
 
 # the path to the file that's outputted by this program
 parser.add_argument(
+    "-f",
+    "--file",
+    dest="file",
+    type=str,
+    help="An ELF file, only meaningful for --embed and --overwrite",
+)
+parser.add_argument(
     "-o",
     "--output",
     dest="output",
     type=str,
-    help="The path to the output file",
+    help="The path to the output file, ignored by --overwrite, use --file instead",
 )
 parser.add_argument(
     "-a",
@@ -209,16 +269,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # check the output path
-    if len(args.output) == 0:
-        print(f"invalid output path, was {args.output}")
+    if not args.output and not args.overwrite:
+        print("no output path specified")
         sys.exit(1)
-    output = Path(args.output)
 
     # switch
     if args.embed:
         # cast args
         file = Path(args.file)
         blob = Path(args.blob)
+        output = Path(args.output)
 
         # call main function
         sys.exit(
@@ -231,10 +291,15 @@ if __name__ == "__main__":
             )
         )
     elif args.prep:
+        # cast args
+        output = Path(args.output)
+
         sys.exit(create_prep_file(size=args.align, output=output))
     elif args.overwrite:
-        print("overwrite not implemented yet!")
-        sys.exit(0)
+        # cast args
+        file = Path(args.file)
+
+        sys.exit(overwrite_file(file=file, symbols=args.symbols))
     else:
         print("invalid mode")
         sys.exit(1)

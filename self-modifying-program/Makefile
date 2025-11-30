@@ -20,8 +20,8 @@ packeddir := $(objdir)/packed
 ALIGN := 1024
 
 # the symbol to obscure
-_syms := obscure
-syms := $(patsubst %, %.sym, $(_syms))
+functions := obscure
+syms := $(patsubst %, %.sym, $(functions))
 
 # sources
 src := smodify.c
@@ -118,6 +118,9 @@ $(semi-prog): $(obj) $(blob)
 $(prog): $(obj) $(packed) | $(semi-prog)
 	@echo "Creating the final program"
 	gcc -o $@ $^ $(ldflags)
+
+	@echo "Replacing functions with nops"
+	python helper.py --overwrite -f $@ --symbols $(functions)
 
 # making directories
 $(objdir):

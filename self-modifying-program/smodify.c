@@ -25,7 +25,7 @@ extern void *__text_start;
 extern void *__text_end;
 
 // function to be called from the new mmap'd page
-void obscure() { printf("hello from obscure"); }
+void obscure() { printf("hello from obscure\n"); }
 
 // unpack obscure
 void unpack_obscure() {
