@@ -29,6 +29,11 @@ SECTIONS {
     *(.obscure)
   }
 
+  /* space for hidden */
+  .hidden : ALIGN(4) {
+    *(.hidden)
+  }
+
   /* BSS section */
   .bss : ALIGN(0x1000) {
     *(.bss)

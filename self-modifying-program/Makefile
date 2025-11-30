@@ -20,7 +20,7 @@ packeddir := $(objdir)/packed
 ALIGN := 1024
 
 # the symbol to obscure
-functions := obscure
+functions := obscure hidden
 syms := $(patsubst %, %.sym, $(functions))
 
 # sources
@@ -42,7 +42,7 @@ program-requirements := $(obj) $(blob)
 final-program := $(obj) $(packed)
 
 # the target build object
-semi-prog := smodify.semi
+semi-prog := intermediate.bin
 prog := smodify.bin
 
 # --- build requirements ---
@@ -117,12 +117,10 @@ $(semi-prog): $(obj) $(blob)
 
 $(prog): $(obj) $(packed) | $(semi-prog)
 	@echo "Creating the final program"
-	gcc -o temp $^ $(ldflags)
+	gcc -o $@ $^ $(ldflags)
 
 	@echo "Replacing functions with nops"
-	python helper.py --overwrite -f temp -o $@ --symbols $(functions)
-
-	@rm temp
+	python helper.py --overwrite -f $@ -o $@ --symbols $(functions)
 
 # making directories
 $(objdir):

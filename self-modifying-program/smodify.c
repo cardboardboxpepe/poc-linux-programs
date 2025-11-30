@@ -20,36 +20,41 @@
 extern void *__obscure_start;
 extern void *__obscure_end;
 
-// addresses of the text section
+// addresses for the hidden function
+extern void *__hidden_start;
+extern void *__hidden_end;
+
+// addresses of the text section, needed for mprotect
 extern void *__text_start;
 extern void *__text_end;
 
-// function to be called from the new mmap'd page
-void obscure() { printf("hello from obscure\n"); }
+// the function to be obscured
+void obscure() { puts("hello from obscure"); }
+
+// a second function to be obscured
+int hidden() {
+  puts("hello from hidden, here's 42");
+  return 42;
+}
 
 // unpack obscure
-void unpack_obscure() {
-  // get handle to function
-  void *target = &obscure;
-  void *ptr = (void *)&__obscure_start;
-
-  // logging
-  printf("__obscure_start @ %p\n", &__obscure_start);
-  printf("__obscure_start @ %p\n", &__obscure_end);
-
+void unpack_into(void *target, char *payload) {
   // calculate size
-  size_t sz = strlen(ptr);
+  size_t sz = strlen(payload);
 
   // helper
-  printf("size of payload %lx\n", sz);
+  printf("size of payload 0x%lx\n", sz);
   fflush(stdout);
 
   // decode binary text
-  if (EVP_DecodeBlock(target, ptr, sz) == -1) {
-    puts("failed to decode obscure");
-  } else {
-    puts("decoded obscure into function");
+  int nbwritten = EVP_DecodeBlock(target, (unsigned char *)payload, sz);
+  if (nbwritten == -1) {
+    puts("failed to unpack");
+    return;
   }
+
+  // logging
+  printf("unpacked 0x%x bytes to %p\n", nbwritten, target);
 }
 
 int main(int argc, char **argv) {
@@ -61,11 +66,23 @@ int main(int argc, char **argv) {
   // set protections
   mprotect(&__text_start, sz, PROT_EXEC | PROT_READ | PROT_WRITE);
 
+  // logging
+  printf("__obscure_start @ %p\n", &__obscure_start);
+  printf("__obscure_start @ %p\n", &__obscure_end);
+
   // unpack obscure
   puts("unpacking obscure");
-  unpack_obscure();
+  unpack_into(&obscure, (char *)&__obscure_start);
 
   // call obscure
   puts("calling obscure");
   obscure();
+
+  // unpack obscure
+  puts("unpacking hidden");
+  unpack_into(&hidden, (char *)&__hidden_start);
+
+  // call hidden
+  int result = hidden();
+  printf("result from hidden: %d\n", result);
 }
