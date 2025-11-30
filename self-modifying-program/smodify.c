@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
   // logging
   printf("__obscure_start @ %p\n", &__obscure_start);
-  printf("__obscure_start @ %p\n", &__obscure_end);
+  printf("__obscure_end @ %p\n", &__obscure_end);
 
   // unpack obscure
   puts("unpacking obscure");
@@ -77,6 +77,10 @@ int main(int argc, char **argv) {
   // call obscure
   puts("calling obscure");
   obscure();
+
+  // logging
+  printf("__hidden_start @ %p\n", &__hidden_start);
+  printf("__hidden_end @ %p\n", &__hidden_end);
 
   // unpack obscure
   puts("unpacking hidden");
