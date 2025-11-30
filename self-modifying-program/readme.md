@@ -24,7 +24,8 @@ The process is as such:
 1. take the instructions and encode them into base64 and overwrite the beginning `n` bytes of a code cave to essentially sneak in the payload into the program,
 1. recompile the program,
 1. overwrite the functions with `nop` instructions, or some other junk, and finally,
-1. serve
+1. serve, or optionally,
+1. strip all the debugging information and symbol information from the binary to make reverse engineering just a tad harder
 
 >The alignment of code caves is important because if you change the size of the
 >code cave between compilations, you could potentially alter the call offsets,
