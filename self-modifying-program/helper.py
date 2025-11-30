@@ -170,8 +170,8 @@ def create_prep_file(size: int, output: Path) -> int:
 
 def overwrite_file(output: Path, file: Path, symbols: list[str]):
     # make a copy of the file
-    contents = file.read_bytes()
-    output.write_bytes(contents)
+    nbwritten = output.write_bytes(file.read_bytes())
+    print(f"wrote {nbwritten} bytes to {output}")
 
     # overwrite functions
     overwrite_function(output, symbols)
