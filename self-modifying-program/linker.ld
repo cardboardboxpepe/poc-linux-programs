@@ -21,7 +21,9 @@ SECTIONS {
 
   /* Code section */
   .text : ALIGN(0x1000) {
+    __text_start = .;
     *(.text)
+    __text_end = .;
   }
 
   /* space for obscure */
@@ -41,8 +43,6 @@ SECTIONS {
 
   /* this stores our hooks into the text section */
   .rodata : ALIGN(0x1000) {
-    __text_start = ADDR(.text);
-    __text_end = ADDR(.text) + 0x3000;
   }
 
   /* Read-write data section */
